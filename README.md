@@ -56,7 +56,7 @@ playwright.config.ts    URL, browser, timeouts y reporte
 .env.example            Variables que hay que completar en local
 ```
 
-`pages/login.page.ts` entra a la app. `pages/lista-precios.page.ts` crea el proyecto, arma la lista inicial y opera la grilla (alta manual, template, edición de precio y borrado). Los tests en `tests/e2e/lista-precios.spec.ts` 
+`pages/login.page.ts` entra a la app. `pages/lista-precios.page.ts` crea el proyecto, arma la lista inicial y opera la grilla (alta manual, template, edición de precio y borrado). Los tests en `tests/e2e/lista-precios.spec.ts` describen el escenario y delegan la interacción al page object.
 
 ## Casos cubiertos
 
@@ -101,7 +101,7 @@ Estos casos los dejaría como siguiente capa porque cubren reglas que los siete 
 10. **Login inválido.** Usuario o contraseña incorrectos no deberían entrar al inicio. El `beforeEach` solo cubre la sesión válida.
 11. **Monedas distintas en el total.** El proyecto se crea en ARS y el template trae precios en USD. Habría que verificar que cada unidad conserva la moneda del archivo y que el total no suma ARS y USD como si fueran la misma moneda.
 
-## Limitación conocidas
+## Limitación conocida
 
 Los tests no borran el proyecto al terminar. Cada corrida suma proyectos `QA <timestamp>` en la cuenta de prueba. Los nombres son únicos para poder distinguirlos, pero el ambiente se va llenando.
 
