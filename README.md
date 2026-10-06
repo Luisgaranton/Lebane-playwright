@@ -74,12 +74,12 @@ En el log de la Action los valores salen enmascarados. Al terminar, el reporte H
 .github/workflows/     Corrida de los tests en GitHub Actions
 pages/                  Page objects (login y lista de precios)
 tests/e2e/              Casos de la lista de precios
-fixtures/               Template de unidades que se sube en el caso 3
+fixtures/               Template de unidades y un archivo que no es Excel
 playwright.config.ts    URL, browser, timeouts y reporte
 .env.example            Variables que hay que completar en local
 ```
 
-`pages/login.page.ts` entra a la app. `pages/lista-precios.page.ts` crea el proyecto, arma la lista inicial y opera la grilla (alta manual, template, edición de precio y borrado). Los tests en `tests/e2e/lista-precios.spec.ts` describen el escenario y delegan la interacción al page object.
+`pages/login.page.ts` entra a la app. `pages/lista-precios.page.ts` crea el proyecto, arma la lista inicial y opera la grilla (alta manual, template, edición de precio y borrado). Los tests en `tests/e2e/` describen el escenario y delegan la interacción al page object. El ingreso inválido está en `login.spec.ts` porque el resto de los casos entra con la sesión válida.
 
 ## Casos cubiertos
 
@@ -95,6 +95,10 @@ Edge cases:
 5. **Eliminar una unidad cuando hay más de una.** Se borra la 102. La lista y la unidad 101 siguen.
 6. **Eliminar la última unidad.** La lista desaparece sola.
 7. **La unidad sin lista también se elimina.** Después del caso anterior, la unidad 101 ya no está. Se vuelve a entrar a Unidades y la lista y la unidad siguen eliminadas.
+8. **Login inválido.** Con la contraseña incorrecta no aparece el inicio. La pantalla queda en el ingreso y avisa que hay que controlar los datos.
+9. **Campos obligatorios del proyecto.** Sin nombre, sin moneda o sin razón social, Registrar queda deshabilitado y no se crea el proyecto.
+10. **Template inválido.** `fixtures/sample.pdf` no es un Excel. La app lo rechaza, no crea una lista nueva y la lista original con la unidad 101 sigue.
+11. **Precio inválido.** Un negativo se guarda sin el signo y el total toma ese importe. Un texto muestra el error de actualización y no cambia el total. Dejar el precio vacío tampoco lo cambia.
 
 ## Decisiones de diseño
 
@@ -110,19 +114,15 @@ Edge cases:
 
 ## Otros casos que testearía
 
-Estos casos los dejaría como siguiente capa porque cubren reglas que los siete escenarios no ejercitan, o porque protegen datos que la grilla podría mostrar bien de casualidad.
+Estos casos los dejaría como siguiente capa porque cubren reglas que los escenarios de arriba no ejercitan, o porque protegen datos que la grilla podría mostrar bien de casualidad.
 
 1. **Lista sin nombre.** La regla dice que el nombre es opcional. Hoy siempre se carga uno. Habría que guardar con el campo vacío y verificar que igual nace una lista (con el nombre que genere la app) y su unidad inicial.
 2. **Precio y total en cero al nacer la lista.** La unidad inicial debería mostrarse en `0,00` y el total arrancar en `0,00`, antes de cualquier edición. Confirma el estado de partida y no solo que la fila existe.
 3. **El alta manual no abre otra lista.** Crear una unidad a mano tiene que sumarla a la lista actual, dejar la 101 en su lugar y no generar una `Lista precios dd/mm/aaaa`. Esa es la diferencia con el template, que sí crea una lista nueva.
 4. **El total baja al borrar una unidad.** En el caso 5 se comprueba que la lista sigue y que la 102 desaparece. Falta afirmar que el total restó el precio de la unidad eliminada y que el de la 101 no cambió.
-5. **Campos obligatorios del proyecto.** Registrar sin nombre, sin moneda o sin razón social no debería crear el proyecto. Evita dejar proyectos a medias si el formulario valida mal.
-6. **Template inválido.** Un archivo que no es Excel, o un Excel sin la hoja `Unidades`, no debería crear una lista ni modificar la que ya existe. El camino feliz no dice qué pasa cuando el archivo viene mal.
-7. **Número de unidad repetido.** Cargar dos veces el mismo número en la misma lista. Hay que fijar si se rechaza o se permite, porque un duplicado rompe la fila que el resto de los tests identifica por número.
-8. **Precio inválido.** Negativo, texto o vacío al editar. El total no debería quedar en un valor que no se puede sumar, ni la celda aceptar algo que la pantalla después no puede mostrar.
-9. **Cancelar el borrado.** El diálogo pide confirmar. Cancelar (o cerrar) tiene que dejar la unidad y el total como estaban.
-10. **Login inválido.** Usuario o contraseña incorrectos no deberían entrar al inicio. El `beforeEach` solo cubre la sesión válida.
-11. **Monedas distintas en el total.** El proyecto se crea en ARS y el template trae precios en USD. Habría que verificar que cada unidad conserva la moneda del archivo y que el total no suma ARS y USD como si fueran la misma moneda.
+5. **Número de unidad repetido.** Cargar dos veces el mismo número en la misma lista. Hay que fijar si se rechaza o se permite, porque un duplicado rompe la fila que el resto de los tests identifica por número.
+6. **Cancelar el borrado.** El diálogo pide confirmar. Cancelar (o cerrar) tiene que dejar la unidad y el total como estaban.
+7. **Monedas distintas en el total.** El proyecto se crea en ARS y el template trae precios en USD. Habría que verificar que cada unidad conserva la moneda del archivo y que el total no suma ARS y USD como si fueran la misma moneda.
 
 ## Limitación conocida
 

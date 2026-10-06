@@ -1,4 +1,4 @@
-import { Page, Locator } from '@playwright/test';
+import { Page, Locator, expect } from '@playwright/test';
 
 export class LoginPage {
   readonly page: Page;
@@ -22,5 +22,19 @@ export class LoginPage {
     await this.passwordInput.fill(password);
     await this.submitButton.click();
     await this.page.getByRole('button', { name: 'Agregar proyecto' }).waitFor({ state: 'visible' });
+  }
+
+  async intentarIngreso(user: string, password: string) {
+    await this.userInput.fill(user);
+    await this.passwordInput.fill(password);
+    await this.submitButton.click();
+  }
+
+  async verificarIngresoRechazado() {
+    await expect(this.page.getByText('Error al ingresar, controle bien los datos')).toBeVisible();
+    await expect(this.page.getByText('Por favor, asegurate que el correo electrónico es correcto.')).toBeVisible();
+    await expect(this.page.getByText('Por favor, asegurate que la contraseña es correcta.')).toBeVisible();
+    await expect(this.page.getByRole('button', { name: 'Agregar proyecto' })).toHaveCount(0);
+    await expect(this.page).toHaveURL(/\/sign-in/);
   }
 }

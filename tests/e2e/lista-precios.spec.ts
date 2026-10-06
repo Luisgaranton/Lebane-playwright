@@ -4,6 +4,7 @@ import { LoginPage } from '../../pages/login.page';
 import { ListaPreciosPage } from '../../pages/lista-precios.page';
 
 const templateUnidades = path.join(__dirname, '../../fixtures/template-unidades.xlsx');
+const templateInvalido = path.join(__dirname, '../../fixtures/sample.pdf');
 
 test.use({ viewport: { width: 1600, height: 1200 } });
 
@@ -118,4 +119,45 @@ test('eliminar la ultima unidad elimina la lista y la unidad', async ({ page }) 
   await lista.reingresarAUnidades();
   await lista.verificarListaAusente(nombreLista);
   await lista.verificarUnidadAusente('101');
+});
+
+test('no registrar el proyecto sin campos obligatorios', async ({ page }) => {
+  // Dado el formulario de un proyecto nuevo
+  // Cuando falta el nombre, la moneda o la razón social
+  // Entonces Registrar sigue deshabilitado
+  // Y no se crea el proyecto
+
+  const lista = new ListaPreciosPage(page);
+  await lista.verificarProyectoNoSeCreaSinObligatorios(`QA ${Date.now()}`);
+});
+
+test('rechazar un template que no es excel', async ({ page }) => {
+  // Dado un proyecto con su lista inicial
+  // Cuando cargo un archivo que no es el Excel de unidades
+  // Entonces la app avisa que el archivo no es válido
+  // Y no se crea otra lista
+  // Y la lista original y la unidad 101 siguen
+
+  const lista = new ListaPreciosPage(page);
+  const { nombreLista } = await lista.crearProyectoConLista();
+
+  await lista.abrirGrilla();
+  await lista.cargarTemplateInvalido(templateInvalido);
+  await lista.verificarListaSigue(nombreLista);
+});
+
+test('rechazar un precio con texto o vacío', async ({ page }) => {
+  // Dado la unidad 101 con precio 0,00
+  // Cuando cargo un precio negativo
+  // Entonces se guarda el importe sin el signo y el total pasa a ese valor
+  // Y si después pongo texto o dejo el precio vacío, el importe no cambia
+
+  const lista = new ListaPreciosPage(page);
+  await lista.crearProyectoConLista();
+
+  await lista.abrirGrilla();
+  await lista.verificarPrecioEnCero('101');
+  await lista.cargarPrecioSinSigno('101', '50');
+  await lista.rechazarPrecio('101', 'abc', '50');
+  await lista.rechazarPrecio('101', '', '50');
 });

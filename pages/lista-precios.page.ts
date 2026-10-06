@@ -220,12 +220,66 @@ export class ListaPreciosPage {
     await expect(this.page.getByText(nombreProyecto).first()).toBeVisible();
   }
 
+  async verificarRegistroBloqueado() {
+    await expect(this.btnRegistrar).toBeDisabled();
+    await expect(this.page).toHaveURL(/\/primer-proyecto$/);
+  }
+
+  async verificarProyectoNoSeCreaSinObligatorios(nombreProyecto: string) {
+    await this.abrirNuevoProyecto();
+    await expect(this.page.getByText('Nombre del proyecto *')).toBeVisible();
+    await expect(this.page.getByText('Moneda *', { exact: true })).toBeVisible();
+    await expect(this.page.getByText('Razón Social *')).toBeVisible();
+    await this.verificarRegistroBloqueado();
+
+    await this.inputNombre.fill(nombreProyecto);
+    await this.verificarRegistroBloqueado();
+
+    await this.completarProyectoSin(nombreProyecto, 'moneda');
+    await this.verificarRegistroBloqueado();
+
+    await this.elegir(this.desplegableMoneda, 'ARS');
+    await this.vaciarRazonSocial();
+    await this.verificarRegistroBloqueado();
+  }
+
+  private async vaciarRazonSocial() {
+    await this.inputRazonSocial.click();
+    await this.inputRazonSocial.fill('');
+    await this.page.keyboard.press('Escape');
+  }
+
+  async completarProyectoSin(nombreProyecto: string, omite: 'moneda' | 'razonSocial') {
+    await this.inputNombre.fill(nombreProyecto);
+    if (omite !== 'moneda') await this.elegir(this.desplegableMoneda, 'ARS');
+    await this.elegir(this.desplegablePais, 'Argentina');
+    await this.elegir(this.desplegableEstado, 'Buenos Aires');
+    await this.elegir(this.desplegableCiudad, 'Campana');
+    await this.desplegableDireccion.fill('Calle QA');
+    await this.inputNroDireccion.fill('123');
+    await this.inputFechaFinalizacion.click();
+    await this.inputFechaFinalizacion.pressSequentially('31122026');
+    await this.page.keyboard.press('Tab');
+    await this.elegir(this.desplegableTipoConstruccion, 'Edificio');
+    await this.elegir(this.desplegableModalidadAjuste, 'Definitivo');
+    if (omite !== 'razonSocial') await this.elegir(this.inputRazonSocial, 'razon social');
+  }
+
   async verificarListaVisible(nombreLista: string) {
     await expect(this.page.getByRole('button', { name: nombreLista })).toBeVisible();
   }
 
   async verificarListaAusente(nombreLista: string) {
     await expect(this.page.getByRole('button', { name: nombreLista })).toHaveCount(0);
+  }
+
+  async verificarSinListaImportada() {
+    await expect(this.page.getByText(/Lista precios \d{2}\/\d{2}\/\d{4}/)).toHaveCount(0);
+  }
+
+  async verificarPrecioEnCero(numero: string) {
+    await expect(this.celdaPrecio(numero)).toContainText('0,00');
+    await expect(await this.totalPrecio()).toContainText('0,00');
   }
 
   async verificarUnidadVisible(numero: string) {
@@ -352,6 +406,72 @@ export class ListaPreciosPage {
 
   async modificarPrecio(numero: string, precioNuevo: string) {
     await this.editarPrecio(numero, precioNuevo);
+  }
+
+  private celdaPrecio(numero: string) {
+    return this.fila(numero).locator('[data-column-id="precio"]');
+  }
+
+  private async totalPrecio() {
+    const fila = this.page.locator('tr').filter({ has: this.page.getByText('Totales', { exact: true }) });
+    const celda = fila.locator('[data-column-id="precio"]');
+    const destino = (await celda.count()) ? celda : fila;
+    await destino.evaluate((nodo) => nodo.scrollIntoView({ inline: 'center', block: 'center' }));
+    return destino;
+  }
+
+  async rechazarPrecio(numero: string, valor: string, precioQueQueda: string) {
+    const celda = this.celdaPrecio(numero);
+    await celda.scrollIntoViewIfNeeded();
+    await celda.dblclick();
+    const input = this.page.getByPlaceholder(/Valor/);
+    await expect(input).toBeVisible();
+    await input.click();
+    await input.fill('');
+    if (valor) {
+      await this.page.keyboard.insertText(valor);
+      await this.page.keyboard.press('Enter');
+      const error = this.page.getByText('Error al actualizar la unidad');
+      await expect(error.first()).toBeVisible();
+      const cerrar = this.page.getByRole('alert').getByRole('button', { name: 'Cerrar' });
+      if (await cerrar.count()) await cerrar.first().click();
+      await expect(celda).not.toContainText(valor);
+    }
+    await this.page.keyboard.press('Enter');
+    await this.page.keyboard.press('Escape');
+    await expect(await this.totalPrecio()).toContainText(precioQueQueda);
+  }
+
+  async cargarPrecioSinSigno(numero: string, precio: string) {
+    const celda = this.celdaPrecio(numero);
+    await celda.scrollIntoViewIfNeeded();
+    await celda.dblclick();
+    await this.page.getByPlaceholder(/Valor/).fill(`-${precio}`);
+    await this.page.keyboard.press('Enter');
+    await expect(celda).toContainText(precio);
+    await expect(celda).not.toContainText('-');
+    await expect(await this.totalPrecio()).toContainText(precio);
+    await expect(this.page.getByRole('alert').filter({ hasText: 'Error al actualizar la unidad' })).toHaveCount(0);
+  }
+
+  async cargarTemplateInvalido(archivo: string) {
+    await this.btnTemplates.click();
+    await this.page.getByRole('button', { name: 'Cargar Template de Unidades', exact: true }).click();
+    await this.page.locator('input[type="file"]').setInputFiles(archivo);
+    await this.page.getByRole('button', { name: 'Cargar', exact: true }).click();
+    await expect(
+      this.page.getByText('No valid entries or contents found, this is not a valid OOXML (Office Open XML) file'),
+    ).toBeVisible();
+    const cancelar = this.page.getByRole('button', { name: 'Cancelar' });
+    if (await cancelar.isVisible()) await cancelar.click();
+    await this.page.keyboard.press('Escape');
+    await this.cerrarPopover();
+  }
+
+  async verificarListaSigue(nombreLista: string) {
+    await expect(this.page.getByText(nombreLista, { exact: true }).first()).toBeVisible();
+    await this.verificarSinListaImportada();
+    await this.verificarUnidadVisible('101');
   }
 
   async eliminarUnidad(numero: string) {
