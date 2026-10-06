@@ -46,9 +46,32 @@ La suite usa Chromium, corre en serie (`workers: 1`) y apunta a la cuenta compar
 
 Si un test falla, Playwright guarda trace, screenshot y video en `test-results/`. Esos archivos no se suben al repositorio.
 
+## GitHub Actions
+
+Esto no lo pide el challenge. Lo sumé para que la suite corra sola en cada cambio y quede el reporte cuando algo falla.
+
+La corrida está en `.github/workflows/e2e.yml`. Instala las dependencias, baja Chromium y ejecuta `npm test` en Ubuntu.
+
+Se dispara en estos casos:
+
+- Push a `main`
+- Pull request
+- A mano, desde la pestaña Actions, con **Run workflow**
+
+Las credenciales no van en el workflow. Hay que cargarlas como secrets del repositorio, en Settings → Secrets and variables → Actions:
+
+| Secret | Valor |
+|---|---|
+| `USER` | Usuario del ambiente de prueba |
+| `PASSWORD` | Contraseña del ambiente de prueba |
+| `LEBANE_URL` | `https://tst.lebane.app` |
+
+En el log de la Action los valores salen enmascarados. Al terminar, el reporte HTML, los traces y los videos quedan como artefacto `playwright-report` durante 7 días. Cada corrida crea proyectos nuevos en la cuenta de prueba, igual que en local.
+
 ## Estructura
 
 ```text
+.github/workflows/     Corrida de los tests en GitHub Actions
 pages/                  Page objects (login y lista de precios)
 tests/e2e/              Casos de la lista de precios
 fixtures/               Template de unidades que se sube en el caso 3
