@@ -1,9 +1,16 @@
+import path from 'path';
 import dotenv from 'dotenv';
 import { defineConfig, devices } from '@playwright/test';
 
 dotenv.config();
 
 const baseURL = (process.env.LEBANE_URL || 'https://tst.lebane.app').trim();
+const authFile = path.join(__dirname, 'playwright/.auth/user.json');
+const navegador = {
+  ...devices['Desktop Chrome'],
+  locale: 'es-AR',
+  timezoneId: 'America/Argentina/Buenos_Aires',
+};
 
 export default defineConfig({
   testDir: './tests',
@@ -23,13 +30,22 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+    {
       name: 'chromium',
-      testMatch: /tests\/e2e\/.*\.spec\.ts/,
+      dependencies: ['setup'],
+      testMatch: /lista-precios\.spec\.ts/,
       use: {
-        ...devices['Desktop Chrome'],
-        locale: 'es-AR',
-        timezoneId: 'America/Argentina/Buenos_Aires',
+        ...navegador,
+        storageState: authFile,
       },
+    },
+    {
+      name: 'chromium-sin-sesion',
+      testMatch: /login\.spec\.ts/,
+      use: navegador,
     },
   ],
 });

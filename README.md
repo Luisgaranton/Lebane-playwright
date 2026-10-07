@@ -24,9 +24,11 @@ cp .env.example .env
 
 ```env
 LEBANE_URL=https://tst.lebane.app
-USER=tu-usuario
-PASSWORD=tu-contraseña
+LEBANE_USER=tu-usuario
+LEBANE_PASSWORD=tu-contraseña
 ```
+
+`LEBANE_USER` no se llama `USER`: en Linux, macOS y los runners de CI esa variable ya trae el usuario del sistema, y dotenv no la pisa.
 
 ## Cómo correr los tests
 
@@ -42,7 +44,7 @@ Otros comandos:
 | `npm run test:ui` | Abre la UI de Playwright |
 | `npm run test:report` | Abre el reporte HTML de la última corrida |
 
-La suite usa Chromium, corre en serie (`workers: 1`) y apunta a la cuenta compartida del ambiente de prueba. Cada test crea su propio proyecto, así que una corrida completa tarda unos minutos y deja proyectos nuevos en esa cuenta.
+La suite usa Chromium y corre en serie (`workers: 1`) contra la cuenta compartida del ambiente de prueba. El login se hace una sola vez en el proyecto `setup` y el resto de los casos reutiliza esa sesión. Cada test de lista crea su propio proyecto. Si el caso pasa, al final lo elimina. Si falla, el proyecto queda en la cuenta para poder mirarlo.
 
 Si un test falla, Playwright guarda trace, screenshot y video en `test-results/`. Esos archivos no se suben al repositorio.
 
@@ -62,24 +64,29 @@ Las credenciales no van en el workflow. Hay que cargarlas como secrets del repos
 
 | Secret | Valor |
 |---|---|
-| `USER` | Usuario del ambiente de prueba |
-| `PASSWORD` | Contraseña del ambiente de prueba |
+| `LEBANE_USER` | Usuario del ambiente de prueba |
+| `LEBANE_PASSWORD` | Contraseña del ambiente de prueba |
 | `LEBANE_URL` | `https://tst.lebane.app` |
 
-En el log de la Action los valores salen enmascarados. Al terminar, el reporte HTML, los traces y los videos quedan como artefacto `playwright-report` durante 7 días. Cada corrida crea proyectos nuevos en la cuenta de prueba, igual que en local.
+Si el repositorio todavía tiene los secrets viejos `USER` y `PASSWORD`, el workflow los usa como respaldo. Conviene renombrarlos a `LEBANE_USER` y `LEBANE_PASSWORD`.
+
+En el log de la Action los valores salen enmascarados. Al terminar, el reporte HTML, los traces y los videos quedan como artefacto `playwright-report` durante 7 días. Los proyectos de los casos que pasan se eliminan al final, igual que en local.
 
 ## Estructura
 
 ```text
-.github/workflows/     Corrida de los tests en GitHub Actions
-pages/                  Page objects (login y lista de precios)
-tests/e2e/              Casos de la lista de precios
-fixtures/               Template de unidades y un archivo que no es Excel
-playwright.config.ts    URL, browser, timeouts y reporte
-.env.example            Variables que hay que completar en local
+.github/workflows/          Corrida de los tests en GitHub Actions
+pages/                      Login, proyecto, navegación y lista de precios
+components/                 Grilla de unidades
+tests/auth.setup.ts         Login único y storageState
+tests/e2e/                  Casos
+tests/support/              Armado del escenario y credenciales
+fixtures/                   Template de unidades y un archivo que no es Excel
+playwright.config.ts        URL, browser, sesión, timeouts y reporte
+.env.example                Variables que hay que completar en local
 ```
 
-`pages/login.page.ts` entra a la app. `pages/lista-precios.page.ts` crea el proyecto, arma la lista inicial y opera la grilla (alta manual, template, edición de precio y borrado). Los tests en `tests/e2e/` describen el escenario y delegan la interacción al page object. El ingreso inválido está en `login.spec.ts` porque el resto de los casos entra con la sesión válida.
+`pages/login.page.ts` entra a la app. `pages/proyecto.page.ts` completa el alta y borra el proyecto. `pages/navegacion.page.ts` va y vuelve a Unidades. `pages/lista-precios.page.ts` arma la lista y carga templates. `components/tabla-unidades.component.ts` opera filas, precios y borrado de unidades. Los `expect` viven en los specs. El ingreso inválido está en `login.spec.ts` y no usa la sesión guardada.
 
 ## Casos cubiertos
 
@@ -98,19 +105,22 @@ Edge cases:
 8. **Login inválido.** Con la contraseña incorrecta no aparece el inicio. La pantalla queda en el ingreso y avisa que hay que controlar los datos.
 9. **Campos obligatorios del proyecto.** Sin nombre, sin moneda o sin razón social, Registrar queda deshabilitado y no se crea el proyecto.
 10. **Template inválido.** `fixtures/sample.pdf` no es un Excel. La app lo rechaza, no crea una lista nueva y la lista original con la unidad 101 sigue.
-11. **Precio inválido.** Un negativo se guarda sin el signo y el total toma ese importe. Un texto muestra el error de actualización y no cambia el total. Dejar el precio vacío tampoco lo cambia.
+11. **Precio negativo.** Se guarda sin el signo y el total toma ese importe. La unidad arranca en `0,00`.
+12. **Precio con texto.** Muestra el error de actualización y no cambia el total.
+13. **Precio vacío.** Dejar el campo vacío tampoco cambia el importe.
 
 ## Decisiones de diseño
 
-- **Page Object.** Los locators y los flujos de pantalla viven en `pages/`. El spec se lee como el caso de negocio.
+- **Page Object por pantalla.** El formulario de proyecto, la navegación, la lista y la grilla están separados. El spec arma el caso y deja los `expect` a la vista.
+- **Sesión reutilizada.** `tests/auth.setup.ts` inicia sesión una vez y guarda `playwright/.auth/user.json`. Los casos de lista arrancan con esa sesión. El archivo no se sube al repositorio.
 - **Un proyecto por test.** El nombre lleva un timestamp (`QA <timestamp>`, `Lista <timestamp>`). Así los casos no comparten datos y se pueden leer el resultado en la app si algo falla.
 - **Una sola corrida a la vez.** `fullyParallel: false` y `workers: 1` porque todos los tests usan la misma cuenta. En paralelo se pisarían el menú y el proyecto activo.
 - **El Excel es la fuente esperada.** El caso del template no hardcodea las 9 filas: las lee con ExcelJS y afirma la grilla contra el archivo. Si cambia el template, cambia la expectativa.
 - **Locators.** Se usan `data-cy` en el formulario de proyecto (la app los expone) y roles accesibles (`button`, `link`, `tab`, `dialog`) en el resto. El número de unidad se busca en la fila de la grilla.
 - **Formato de Argentina.** El browser corre con `locale: es-AR` y `America/Argentina/Buenos_Aires`. Los precios se afirman con el formato que muestra la pantalla (`125.000`), no con el número crudo.
 - **Viewport ancho.** La grilla tiene muchas columnas. El test usa 1600×1200 y, cuando hace falta, desplaza la tabla para llegar a Precio unidad.
-- **Reintento solo donde la UI es inestable.** Elegir una opción del autocomplete a veces no confirma el valor, y borrar una unidad a veces responde `Error al eliminar la unidad` sin borrarla. Esos dos flujos reintentan la acción. El resto de las verificaciones falla a la primera (`retries: 0`), para no esconder un caso rojo.
-- **Credenciales afuera del código.** Van en `.env`, que está en `.gitignore`. `.env.example` documenta los nombres de las variables.
+- **Reintento solo donde la UI es inestable.** Elegir una opción del autocomplete a veces no confirma el valor, y borrar una unidad a veces responde `Error al eliminar la unidad` sin borrarla. Esos flujos reintentan con `expect.toPass`. El resto de las verificaciones falla a la primera (`retries: 0`), para no esconder un caso rojo.
+- **Credenciales afuera del código.** Van en `.env`, que está en `.gitignore`. Los nombres son `LEBANE_USER` y `LEBANE_PASSWORD`.
 
 ## Otros casos que testearía
 
@@ -124,9 +134,9 @@ Estos casos los dejaría como siguiente capa porque cubren reglas que los escena
 6. **Cancelar el borrado.** El diálogo pide confirmar. Cancelar (o cerrar) tiene que dejar la unidad y el total como estaban.
 7. **Monedas distintas en el total.** El proyecto se crea en ARS y el template trae precios en USD. Habría que verificar que cada unidad conserva la moneda del archivo y que el total no suma ARS y USD como si fueran la misma moneda.
 
-## Limitación conocida
+## Limpieza
 
-Los tests no borran el proyecto al terminar. Cada corrida suma proyectos `QA <timestamp>` en la cuenta de prueba. Los nombres son únicos para poder distinguirlos, pero el ambiente se va llenando.
+Cuando un caso de lista pasa, el `afterEach` abre Información de proyecto, confirma con el texto `eliminar` y espera a salir de ese proyecto. Si el caso falla, el proyecto `QA <timestamp>` queda en la cuenta para poder revisarlo junto con el trace.
 
 ## Idea a futuro
 

@@ -26,8 +26,8 @@ jobs:
         env:
           CI: true
           LEBANE_URL: ${{ secrets.LEBANE_URL }}
-          USER: ${{ secrets.USER }}
-          PASSWORD: ${{ secrets.PASSWORD }}
+          LEBANE_USER: ${{ secrets.LEBANE_USER || secrets.USER }}
+          LEBANE_PASSWORD: ${{ secrets.LEBANE_PASSWORD || secrets.PASSWORD }}
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
